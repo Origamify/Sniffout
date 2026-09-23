@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block output_box %}{% endblock %}
+{% block chat_zone %}{% endblock %}
+
+{% block article_content %}
+<h2>Choose a wiki</h2>
+{% if wikis %}
+<ul class="results-list">
+  {% for name in wikis %}
+  <li class="result-entry wiki-entry">
+    <a class="wiki-link" href="/{{ name }}/">{{ name }}</a>
+    <form action="/wiki/{{ name }}/archive" method="post">
+      <button type="submit" class="btn-quiet">Archive</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">No wikis yet. Create one below.</p>
+{% endif %}
+
+<details class="index-cat wiki-archive">
+  <summary>Archive ({{ archived | length }})</summary>
+  {% if archived %}
+  <ul class="results-list">
+    {% for name in archived %}
+    <li class="result-entry wiki-entry">
+      <span class="wiki-archived">{{ name }}</span>
+      <form action="/wiki/{{ name }}/unarchive" method="post">
+        <button type="submit" class="btn-quiet">Unarchive</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-state">Nothing archived.</p>
+  {% endif %}
+</details>
+
+<h2>Create a new wiki</h2>
+<form action="/wiki/create" method="post">
+  <input type="text" name="name" required placeholder="New wiki name…" aria-label="Wiki name" />
+  <button type="submit">Create</button>
+</form>
+<p id="create-error" class="create-error" hidden></p>
+{% endblock %}

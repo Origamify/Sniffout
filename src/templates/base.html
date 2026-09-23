@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}SniffOut{% endblock %}</title>
+  <link rel="icon" type="image/png" href="/static/img/title.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@500;900&display=swap" />
+  <link rel="stylesheet" href="/static/css/main.css" />
+</head>
+<body>
+  {% macro render_article_tree(items) %}
+  <ul class="index-list">
+    {% for item in items %}
+      {% if item.type == "dir" %}
+      <li>
+        <details class="index-cat" open>
+          <summary>{{ item.label }}</summary>
+          {{ render_article_tree(item.children) }}
+        </details>
+      </li>
+      {% elif item.children %}
+      <li>
+        <details class="index-cat" open>
+          <summary><a href="/{{ wiki }}/article/{{ item.name }}"{% if active and item.name == active %} class="active-link"{% endif %}>{{ item.label }}</a></summary>
+          {{ render_article_tree(item.children) }}
+        </details>
+      </li>
+      {% else %}
+      <li{% if active and item.name == active %} class="active"{% endif %}>
+        <a href="/{{ wiki }}/article/{{ item.name }}">{{ item.label }}</a>
+      </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+  {% endmacro %}
+  <div class="layout">
+    <aside id="zone-index" class="panel">
+      <a class="logo" href="/" title="SniffOut — back to the wiki picker">
+        <img src="/static/img/logo.png" alt="SniffOut" width="478" height="225" />
+        <span class="logo-word">Sniff<em>Out</em></span>
+        <span class="logo-tag">research hound</span>
+      </a>
+      {% if wiki %}
+      <ul class="index-list wiki-state">
+        <li><a href="/{{ wiki }}/plan">Plan</a></li>
+        <li><a href="/{{ wiki }}/leads">Leads</a></li>
+        <li><a href="/{{ wiki }}/log">Log</a></li>
+        <li><a href="/{{ wiki }}/manual">Search &amp; ingest</a></li>
+      </ul>
+      <details class="index-cat" open>
+        <summary>Articles</summary>
+        {{ render_article_tree(articles) }}
+      </details>
+      <details class="index-cat">
+        <summary>Sources</summary>
+        <p class="index-nav"><a href="/{{ wiki }}/sources-index">Sources index</a></p>
+        <ul class="index-list">
+          {% for source in sources %}
+            <li{% if active and source.name == active %} class="active"{% endif %}>
+              <a href="/{{ wiki }}/source/{{ source.name }}">
+                {{ source.label }}
+                {% if source.timestamp %}<span class="index-timestamp">{{ source.timestamp }}</span>{% endif %}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+      {% block index_forms %}{% endblock %}
+    </aside>
+    <div class="resizer" data-side="left"></div>
+
+    <main id="zone-article" class="panel">
+      <article>
+        {% block article_content %}{% endblock %}
+      </article>
+    </main>
+    <div class="resizer" data-side="right"></div>
+
+    <aside id="zone-status" class="panel">
+      {% block status_zone %}
+      <div class="status-box" id="jobs-box">
+        <h2>Jobs</h2>
+        <ul id="jobs-list" aria-live="polite"><li class="job-none">No jobs yet.</li></ul>
+      </div>
+      {% block output_box %}
+      <div class="status-box" id="output-box">
+        <h2>Latest output</h2>
+        <div id="status-content" aria-live="polite"><p>No jobs running. No results yet.</p></div>
+      </div>
+      {% endblock %}
+      {% endblock %}
+
+      {% block chat_zone %}
+      <form id="zone-chat" class="chat-box" action="/{{ wiki }}/agent-request" method="post">
+        <label for="chat-message">Agent chat</label>
+        <textarea id="chat-message" name="message" rows="3" placeholder="Ask the agent…"></textarea>
+        <div class="chat-actions">
+          <label class="max-runs" for="max-runs">Max runs
+            <input type="number" id="max-runs" name="max_runs" min="1" max="40" value="10" />
+          </label>
+          <button type="submit">Send once</button>
+          <button type="button" id="start-loop">Start Loop</button>
+          <button type="button" id="stop-loop" disabled>Stop Loop</button>
+        </div>
+      </form>
+      {% endblock %}
+    </aside>
+  </div>
+  <script src="/static/js/main.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

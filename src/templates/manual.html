@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Search &amp; ingest — SniffOut{% endblock %}
+
+{% block article_content %}
+<h1>Search &amp; ingest</h1>
+<h2>Lead search</h2>
+<form action="/{{ wiki }}/search" method="post">
+  <input type="text" name="query" required placeholder="Describe the lead…" aria-label="Search query" />
+  <button type="submit">Search</button>
+</form>
+
+<h2>Ingest web page</h2>
+<form action="/{{ wiki }}/ingest" method="post" class="ingest-form">
+  <input type="text" name="url" required placeholder="Ingest a page URL…" aria-label="URL to ingest" />
+  <button type="submit">Ingest</button>
+</form>
+
+
+{% if results %}
+<p class="results-count">{{ results|length }} result{{ "s" if results|length != 1 else "" }}</p>
+<ul class="results-list">
+  {% for entry in results %}
+  <li class="result-entry">
+    <span class="result-rank">{{ loop.index }}</span>
+    <div class="result-main">
+      <a href="{{ entry.url }}">{{ entry.title }}</a>
+      <p class="result-url"><span class="result-domain">{{ entry.domain }}</span>{{ entry.url }}</p>
+      <p class="result-snippet">{{ entry.snippet }}</p>
+    </div>
+    {% if entry.url %}<button type="button" class="result-ingest" data-url="{{ entry.url }}">Ingest</button>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% elif error %}
+<p class="search-error">{{ error }}</p>
+{% else %}
+<p class="empty-state">No results yet. Search a lead or ingest a page to start.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Sources Index — SniffOut{% endblock %}
+
+{% block article_content %}
+<h1>Sources</h1>
+{% if entries %}
+<p class="sources-count">{{ entries|length }} ingested page{{ 's' if entries|length != 1 }}</p>
+<ul class="sources-index-list">
+  {% for entry in entries %}
+  <li class="source-row">
+    <a class="source-link" href="/{{ wiki }}/source/{{ entry.filename }}">
+      <span class="source-title" title="{{ entry.label }}">{{ entry.label }}</span>
+      {% if entry.timestamp %}<span class="source-date">{{ entry.timestamp }}</span>{% endif %}
+      {% if entry.url %}<span class="source-url" title="{{ entry.url }}">{{ entry.url }}</span>{% endif %}
+    </a>
+    <form class="source-delete" action="/{{ wiki }}/source/{{ entry.filename }}/delete" method="post"
+          onsubmit="return confirm('Delete this source?')">
+      <button type="submit">Delete</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">No sources yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}{{ filename }} — SniffOut{% endblock %}
+
+{% block article_content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/{{ wiki }}/">{{ wiki }}</a>
+  <span class="crumb-sep">/</span>
+  <span>{{ kind }}</span>
+  <span class="crumb-sep">/</span>
+  <span class="crumb-file">{{ filename }}</span>
+</nav>
+<div class="source-body">{{ content | safe }}</div>
+{% if source_ref %}
+<p class="source-meta">Source: {% if source_ref.startswith("http") %}<a href="{{ source_ref }}" rel="noopener">{{ source_ref }}</a>{% else %}{{ source_ref }}{% endif %}</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/mermaid.min.js"></script>
+<script>
+(function () {
+  if (!window.mermaid) return;
+  var blocks = document.querySelectorAll("pre > code.language-mermaid");
+  if (!blocks.length) return;
+  blocks.forEach(function (code) {
+    var div = document.createElement("div");
+    div.className = "mermaid";
+    div.textContent = code.textContent;  // entities already decoded by the DOM
+    code.parentElement.replaceWith(div);
+  });
+  // strict: no script/handler injection from diagram text (sources are untrusted)
+  // theme "base" + the app palette (see :root in main.css): onyx bg,
+  // ink-black node fill, mint borders/edges, snow text
+  mermaid.initialize({
+    securityLevel: "strict",
+    startOnLoad: false,
+    theme: "base",
+    themeVariables: {
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      fontSize: "14px",
+      background: "#0b0f12",
+      mainBkg: "#161b22",
+      nodeBorder: "#10b981",
+      primaryColor: "#161b22",
+      primaryBorderColor: "#10b981",
+      primaryTextColor: "#f8fafc",
+      secondaryColor: "#12241e",
+      secondaryBorderColor: "#14e19d",
+      secondaryTextColor: "#f8fafc",
+      tertiaryColor: "#0f1418",
+      tertiaryBorderColor: "#10b981",
+      tertiaryTextColor: "#f8fafc",
+      lineColor: "#14e19d",
+      textColor: "#f8fafc",
+      clusterBkg: "#0f1418",
+      clusterBorder: "rgba(20,225,157,0.35)",
+      edgeLabelBackground: "#0b0f12",
+      actorBkg: "#161b22",
+      actorBorder: "#10b981",
+      actorTextColor: "#f8fafc",
+      actorLineColor: "#14e19d",
+      signalColor: "#f8fafc",
+      signalTextColor: "#f8fafc",
+      labelBoxBkgColor: "#161b22",
+      labelBoxBorderColor: "#10b981",
+      labelTextColor: "#f8fafc",
+      loopTextColor: "#14e19d",
+      noteBkgColor: "#12241e",
+      noteBorderColor: "#14e19d",
+      noteTextColor: "#f8fafc"
+    }
+  });
+  mermaid.run({ querySelector: ".mermaid" });
+})();
+</script>
+{% endblock %}
