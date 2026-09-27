@@ -14,4 +14,5 @@ log.md
 research_repository/
 archive_repository/
 .ruff_cache/
+.venv/
 .env

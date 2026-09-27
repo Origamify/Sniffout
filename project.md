@@ -86,6 +86,7 @@ endpoint) — see uHarness docs.
 | `research_repository/` | Wiki data (gitignored); `LeanFIRE/` is a live example |
 | `utils/link_review.py` | Maintenance: walks articles, enforces link brackets (internal `[text](path.md)`, external `[[label]](url)`), flags dead links as `<deadlink>url</deadlink>`, marks uncited sources as pruning candidates; `--dry-run` to preview |
 | `utils/export_docusaurus.py` | Export: builds a Docusaurus site under `docusaurus_export/<slug>/` (articles tree, optional `--sources`; `.order` → sidebar positions, first H1 → title, `[[x]](url)` refs flattened, deadlink flags and stray `<`/`{` MDX-escaped; scaffolds package.json/config/sidebars) |
+| `utils/make_gif.py` | Docs: rebuilds `docs/demo.gif` for the README — serves the app in-process against wiped `demo_gif_*` scratch dirs (removed after), drives headless Firefox through the real first-run flow; needs Firefox + a working `.env`; what's shown: `utils/make_gif.md` |
 | `tests/` | pytest, one file per module; `conftest.py` = Flask test client, temp-wiki `active_wiki`, dispatch stub; `utils/selenium_review.py` = E2E pass |
 | `workflow.md` | User-facing overview: setup, what you do, how a run advances a wiki |
 

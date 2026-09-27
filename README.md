@@ -8,6 +8,12 @@ A local, multi-wiki research workbench: browse wiki articles and sources in a
 Flask web UI, search the web, ingest URLs/PDFs/markdown into a wiki, and let
 researcher agents write the wiki for you under a judge-supervised loop.
 
+![SniffOut in action — start fresh, create a wiki, brief the researcher,
+watch plan.md fill in](docs/demo.gif)
+
+Rebuild it after UI changes with `python utils/make_gif.py` — see
+[utils/make_gif.md](utils/make_gif.md) for what's shown.
+
 ## What it does
 
 - **Multi-wiki UI** — wiki picker, article/source browsing, per-wiki search,

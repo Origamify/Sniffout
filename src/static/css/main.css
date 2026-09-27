@@ -20,9 +20,10 @@
   --alert: #f87171;
   --queued: #f59e0b;
 
-  /* Layout */
+  /* Layout — right panel defaults wide enough for the chat-actions row
+     (Max runs + Send once + Start/Stop Loop, ~430px natural) with no scrollbar */
   --left-col: 280px;
-  --right-col: 280px;
+  --right-col: 480px;
 }
 
 * { box-sizing: border-box; }
