@@ -32,7 +32,9 @@ both fully. You may edit both — minimally. Never open `sources/`,
 check". The plan and the log are the record; judge the record.
 
 - `plan.md` — the wiki's state: goal, next steps, status, open gaps, scope.
-- `log.md` — the append-only record of what each run actually did.
+- `log.md` — the record of what each run actually did. The app may have
+  trimmed the oldest entries to keep the file readable — judge the
+  surviving record; `plan.md` carries the long view.
 
 ## Judgment protocol
 

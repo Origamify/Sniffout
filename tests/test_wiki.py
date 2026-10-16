@@ -148,6 +148,49 @@ def test_unarchive_wiki_rejects_taken_name(tmp_path, monkeypatch):
 # --- routes -------------------------------------------------------------------
 
 
+def test_trim_log_leaves_small_logs_alone(tmp_path):
+    base = tmp_path / "w"
+    base.mkdir()
+    (base / "log.md").write_text("# Log\n\n- Run 1: wrote a.md\n", encoding="utf-8")
+    assert wiki.trim_log(base) is False
+    assert (base / "log.md").read_text(encoding="utf-8") == "# Log\n\n- Run 1: wrote a.md\n"
+
+
+def test_trim_log_missing_file_is_noop(tmp_path):
+    assert wiki.trim_log(tmp_path) is False
+
+
+def test_trim_log_cuts_to_recent_entries(tmp_path):
+    base = tmp_path / "w"
+    base.mkdir()
+    entries = [f"- Run {i}: " + "x" * 500 for i in range(1, 46)]  # ~23 KB
+    (base / "log.md").write_text("# Log\n\n" + "\n".join(entries) + "\n", encoding="utf-8")
+    assert wiki.trim_log(base) is True
+    text = (base / "log.md").read_text(encoding="utf-8")
+    assert len(text.encode("utf-8")) <= wiki.LOG_TARGET_BYTES + 600
+    assert "- Run 40:" in text and "- Run 39:" in text  # newest entries survive
+    assert "- Run 1:" not in text  # old history dropped
+
+
+def test_trim_log_always_keeps_newest_entry(tmp_path):
+    base = tmp_path / "w"
+    base.mkdir()
+    huge = "- Run 9: " + "y" * (wiki.LOG_TARGET_BYTES + 500)  # newest entry over target
+    old = "\n".join(f"- Run {i}: " + "z" * 1300 for i in range(8))  # ~10.5 KB filler
+    (base / "log.md").write_text("# Log\n\n" + old + "\n\n" + huge + "\n", encoding="utf-8")
+    assert wiki.trim_log(base) is True
+    text = (base / "log.md").read_text(encoding="utf-8")
+    assert "- Run 9:" in text and "- Run 1:" not in text
+
+
+def test_trim_log_hard_cuts_lineless_log(tmp_path):
+    base = tmp_path / "w"
+    base.mkdir()
+    (base / "log.md").write_text("- " + "y" * (wiki.LOG_MAX_BYTES + 1), encoding="utf-8")
+    assert wiki.trim_log(base) is True
+    assert (base / "log.md").stat().st_size <= wiki.LOG_TARGET_BYTES + 1
+
+
 def test_picker_lists_wikis_as_links(client, tmp_path, monkeypatch):
     repo = _repo(tmp_path, monkeypatch)
     (repo / "alpha").mkdir()

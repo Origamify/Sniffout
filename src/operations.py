@@ -10,9 +10,11 @@ from urllib.parse import urlsplit
 
 from uharness import AbortRun, Uharness
 
-from .agent_tools import (INGEST_TOOL_SCHEMA, SEARCH_TOOL_SCHEMA,
-                          make_ingest_tool, make_search_tool)
-from .wiki import LEADS_FILE, LOG_FILE, PLAN_FILE, results_dir
+from . import rag
+from .agent_tools import (INGEST_TOOL_SCHEMA, RAG_TOOL_SCHEMA,
+                          SEARCH_TOOL_SCHEMA, make_ingest_tool, make_rag_tool,
+                          make_search_tool)
+from .wiki import LEADS_FILE, LOG_FILE, PLAN_FILE, results_dir, trim_log
 
 # The harness receives one fully composed prompt; persona snippets live in
 # this project's prompt_snippets/ (system prompt + flag snippets).
@@ -181,7 +183,7 @@ def _worker_loop() -> None:
     """Pull queued jobs forever; one job runs at a time per worker."""
     while True:
         job_id, (prompt, out, wiki_base, reasoning, model, tools,
-                 done_event, stop) = _job_queue.get()
+                 done_event, stop, after) = _job_queue.get()
         try:
             _JOB_STATES[job_id]["state"] = "running"
             try:
@@ -191,6 +193,11 @@ def _worker_loop() -> None:
                 error = e
                 _publish_crash(out, f"Dispatch failed: {e}")
             _JOB_STATES[job_id]["state"] = "failed" if error else "done"
+            if after:  # post-job index upkeep (never kills the worker)
+                try:
+                    after(wiki_base, error)
+                except Exception as e:
+                    rag._warn(f"after-hook: {e!r}")
         finally:
             _job_queue.task_done()
             if done_event:  # after the state update: no race for the reader
@@ -219,7 +226,7 @@ def _dispatch(task: str, output_file: Path, wiki_base: Path,
               flags: tuple[str, ...] = (), reasoning: str | None = None,
               model: str | None = None, tools=(), job_id: str | None = None,
               done_event: threading.Event | None = None,
-              stop=None) -> None:
+              stop=None, after=None) -> None:
     """Compose the prompt and queue one job for the bounded worker pool.
 
     ``flags`` select persona snippets from ``prompt_snippets/`` that are
@@ -232,6 +239,8 @@ def _dispatch(task: str, output_file: Path, wiki_base: Path,
     the worker once the run ends — after the result is published, failed runs
     included (the loop thread waits on it; the sidebar keeps file-polling).
     ``stop`` is the harness's cooperative cancellation callback (see _run_job).
+    ``after(wiki_base, error)`` runs on the worker thread once the job ends,
+    before ``done_event`` — the retrieval-index upkeep hook (rag depot).
     """
     prompt = _compose(task, flags)
     if output_file:
@@ -241,7 +250,7 @@ def _dispatch(task: str, output_file: Path, wiki_base: Path,
     job_id = job_id or _job_id(wiki_base)
     _JOB_STATES[job_id] = {"state": "queued", "wiki": wiki_base.name}
     _job_queue.put((job_id, (prompt, output_file, wiki_base, reasoning,
-                             model, tools, done_event, stop)))
+                             model, tools, done_event, stop, after)))
 
 
 def _research_task(message: str, wiki_base) -> str:
@@ -267,6 +276,7 @@ def _dispatch_researcher(task: str, wiki_base, flags: tuple[str, ...],
                          done_event: threading.Event | None = None,
                          stop=None):
     """Queue one researcher run (standard tools); returns (job_id, output path)."""
+    trim_log(wiki_base)  # agents can't read a log past the harness size cap
     job_id = _job_id(wiki_base)  # doubles as the result filename
     out = results_dir(wiki_base.name) / f"{job_id}.out"
     _dispatch(
@@ -277,10 +287,12 @@ def _dispatch_researcher(task: str, wiki_base, flags: tuple[str, ...],
         reasoning=REASONING["sniff_research"],
         model=MODELS["sniff_research"],
         tools=[(INGEST_TOOL_SCHEMA, make_ingest_tool(wiki_base)),
-               (SEARCH_TOOL_SCHEMA, make_search_tool(wiki_base))],
+               (SEARCH_TOOL_SCHEMA, make_search_tool(wiki_base)),
+               (RAG_TOOL_SCHEMA, make_rag_tool(wiki_base))],
         job_id=job_id,
         done_event=done_event,
         stop=stop,
+        after=lambda wb, _err: rag.refresh_articles(wb),
     )
     return job_id, out
 
@@ -338,6 +350,7 @@ def run_judge(wiki_base, stop=None):
     could starve behind busy researchers. Exceptions propagate; the loop
     treats them as a failed judge (unreadable verdict).
     """
+    trim_log(wiki_base)  # agents can't read a log past the harness size cap
     uh = Uharness(env_path=ENV_PATH,
                   path_permissions=[str(wiki_base.resolve())],
                   max_rounds=MAX_ROUNDS, model=MODELS["sniff_judge"])
@@ -377,8 +390,21 @@ def dispatch_sniff_ingest(source_path: str | Path, wiki_base) -> Path | None:
         flags=("sniff_ingest",),
         reasoning=REASONING["sniff_ingest"],
         model=MODELS["sniff_ingest"],
+        after=_after_cleanup(source_path),
     )
     return out
+
+
+def _after_cleanup(source_path):
+    """Post-job hook for queued cleanups: index the part on success only
+    (a failed cleanup leaves the source out of the depot)."""
+    path = Path(source_path)
+
+    def after(wiki_base, error):
+        if error is None:
+            rag.index_source(path, wiki_base)
+
+    return after
 
 
 def run_sniff_ingest_now(source_path: str | Path, wiki_base) -> Path | None:
@@ -394,6 +420,8 @@ def run_sniff_ingest_now(source_path: str | Path, wiki_base) -> Path | None:
                      REASONING["sniff_ingest"], MODELS["sniff_ingest"])
     if error:
         raise RuntimeError(f"cleanup failed: {error}") from error
+    if Path(source_path).is_file():  # index only on success (same rule as queued)
+        rag.index_source(source_path, wiki_base)
     return out
 
 

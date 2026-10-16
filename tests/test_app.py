@@ -263,6 +263,18 @@ def test_ingest_splits_large_markdown_into_parts(client, active_wiki, monkeypatc
     assert len(dispatched) == 3
 
 
+def test_cross_origin_post_rejected(client, active_wiki):
+    """CSRF backstop: POSTs carrying a foreign Origin get 403; same-origin and
+    Origin-less requests (curl, tests, the app's own JS) pass."""
+    resp = client.post("/testwiki/search", data={"query": ""},
+                       headers={"Origin": "http://evil.example"})
+    assert resp.status_code == 403
+    same_origin = client.post("/testwiki/search", data={"query": ""},
+                              headers={"Origin": "http://localhost"})
+    no_origin = client.post("/testwiki/search", data={"query": ""})
+    assert same_origin.status_code != 403 and no_origin.status_code != 403
+
+
 def test_search_renders_results(client, active_wiki, monkeypatch):
     block1 = (
         "Title: Alpha Lead\n"
@@ -556,6 +568,20 @@ def test_article_tree_subdir_without_index_is_plain_group(active_wiki):
     tree = webui._build_article_tree(art, art, False)
     assert tree == [{"type": "dir", "label": "group", "children": [
         {"type": "article", "name": "group/child.md", "label": "Child"}]}]
+
+
+def test_article_tree_hides_dot_entries(active_wiki):
+    """Dot-entries (`.trash/`, `.order`) never show in the sidebar tree."""
+    from src import webui
+    art = active_wiki / "articles"
+    art.mkdir()
+    (art / "x.md").write_text("# X\n", encoding="utf-8")
+    trash = art / ".trash"
+    trash.mkdir()
+    (trash / "gone.md").write_text("# Gone\n", encoding="utf-8")
+    (art / ".order").write_text("x.md\n", encoding="utf-8")
+    tree = webui._build_article_tree(art, art, False)
+    assert [n["name"] for n in tree] == ["x.md"]
 
 
 def test_source_meta_splits_label_and_timestamp():

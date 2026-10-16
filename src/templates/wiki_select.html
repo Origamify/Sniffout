@@ -10,6 +10,9 @@
   {% for name in wikis %}
   <li class="result-entry wiki-entry">
     <a class="wiki-link" href="/{{ name }}/">{{ name }}</a>
+    <form action="/wiki/{{ name }}/reindex" method="post">
+      <button type="submit" class="btn-quiet">Reindex</button>
+    </form>
     <form action="/wiki/{{ name }}/archive" method="post">
       <button type="submit" class="btn-quiet">Archive</button>
     </form>

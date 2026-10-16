@@ -348,7 +348,7 @@ def test_dispatch_loop_run_composes_loop_mode(monkeypatch, tmp_path):
     assert "# Loop mode" in prompt and "judge" in prompt
     assert "# SniffOut Judge" not in prompt  # the judge persona is judge jobs only
     assert "find stuff" in prompt
-    assert set(calls[0]["registered_tools"]) == {"ingest_url", "web_search"}
+    assert set(calls[0]["registered_tools"]) == {"ingest_url", "web_search", "rag_search"}
     assert calls[0]["max_rounds"] == 100  # MAX_ROUNDS: turn cap, not the loop's run counter
     operations.dispatch_agent_request("plain chat", tmp_path)
     deadline = time.monotonic() + 5.0

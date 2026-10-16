@@ -4,10 +4,11 @@ import argparse
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
-from . import ingest, loop, markdown_render, operations, results, search, wiki
+from . import ingest, loop, markdown_render, operations, rag, results, search, wiki
 from .wiki import LEADS_FILE, LOG_FILE, PLAN_FILE
 
 SRC = Path(__file__).resolve().parent
@@ -18,6 +19,22 @@ app = Flask(__name__, template_folder=str(SRC / "templates"), static_folder=str(
 # at completion) is the ground truth for "done"; the map only remembers what
 # to look for so a reloaded page can resume watching.
 _ACTIVE_JOBS: dict[str, str] = {}
+
+
+@app.before_request
+def _reject_cross_origin():
+    """CSRF backstop: a browser's cross-origin POST carries a foreign Origin.
+
+    Same-origin and Origin-less clients (the app's own JS, curl, tests)
+    pass; anything else is a forged request from another website. Only
+    POST is checked — every state-changing route is a POST.
+    """
+    if request.method != "POST":
+        return None
+    origin = request.headers.get("Origin")
+    if origin and urlsplit(origin).netloc != request.host:
+        return "cross-origin request rejected", 403
+    return None
 
 
 def _wiki_base(wikiname):
@@ -64,6 +81,18 @@ def wiki_unarchive(name):
     except ValueError as e:
         return str(e), 400
     return redirect(url_for("wiki_index", wikiname=name))
+
+
+@app.post("/wiki/<name>/reindex")
+def wiki_reindex(name):
+    """Rebuild the wiki's retrieval index (sources + articles) from disk."""
+    base = _wiki_base(name)
+    if base is None:
+        return "Not found", 404
+    if _wiki_busy(name):  # a rewrite in flight would index torn files
+        return "stop the loop and let running jobs finish before reindexing", 409
+    rag.reindex_wiki(base)
+    return redirect(url_for("index"))
 
 
 def _job_in_flight(name):
@@ -291,6 +320,7 @@ def source_delete(wikiname, filename):
         dest = trash / f"{target.stem}-{n}{target.suffix}"
         n += 1
     target.replace(dest)
+    rag.deindex_source(target, base)  # keep the retrieval index in step
     return redirect(url_for("sources_index", wikiname=wikiname))
 
 
@@ -435,25 +465,25 @@ def search_route(wikiname):
     if base is None:
         return "Not found", 404
     query = request.form.get("query", "") or ""
-    results, error = None, None
+    hits, error = None, None
     if query.strip():
         try:
-            results = search.exa_search(query)
+            hits = search.exa_search(query)
         except Exception as e:
             error = f"Search failed: {e}"
         else:
-            wiki.append_leads(base, query, results)
+            wiki.append_leads(base, query, hits)
     if "application/json" in request.accept_mimetypes or request.args.get("format") == "json":
         if error is not None:
             return jsonify({"error": error}), 502
-        if results is not None:
-            return jsonify({"results": results}), 200
+        if hits is not None:
+            return jsonify({"results": hits}), 200
     return render_template(
         "manual.html",
         wiki=wikiname,
         sources=_list_sources(base),
         articles=_list_articles(base),
-        results=results,
+        results=hits,
         query=query,
         error=error,
     )
@@ -511,9 +541,13 @@ def _build_article_tree(directory, base, hide_index):
     A subdirectory containing index.md is an "article" node: the page plus
     its sibling files as children (index.md itself is hidden there).
     Any other directory is a plain group. Each directory honors its own
-    .order: entries listed there come first, in file order.
+    .order: entries listed there come first, in file order. Dot-entries
+    (`.trash/`, `.order`, …) never appear in the tree.
     """
-    entries = sorted(directory.iterdir(), key=lambda p: p.name.lower())
+    entries = sorted(
+        (p for p in directory.iterdir() if not p.name.startswith(".")),
+        key=lambda p: p.name.lower(),
+    )
     entries = _apply_order(
         entries, _read_order(directory), key=lambda p: p.stem if p.is_file() else p.name
     )

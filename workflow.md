@@ -41,7 +41,8 @@ is no judge — the operator is.
 
 - **Pick or create a wiki** — a folder of sources and articles.
 - **Ingest** — paste a URL, PDF link, or local `.md` path; it's fetched, cleaned,
-  and stored in `sources/` with its origin.
+  and stored in `sources/` with its origin. Once its cleanup job finishes it
+  also becomes searchable via the wiki's retrieval index.
 - **Search** — per-wiki search box (Exa); hits land in `leads.md`.
 - **Chat** — one message = one researcher run. Empty box = "just continue the plan".
 - **Loop it** — same direction on repeat: set **Max runs** (default 10, cap 40),
@@ -49,6 +50,20 @@ is no judge — the operator is.
   trips, a run errors, or you hit **Stop Loop** (kills the run in flight). The
   sidebar shows the final report with the stop reason. One loop per wiki; a
   restart ends it.
+- **Reindex** — button next to Archive on the picker: rebuilds the wiki's
+  retrieval index from disk (`sources/` + `articles/`). Use it after bulk
+  file changes or if the index looks stale.
+
+## The retrieval index (RAG)
+
+Each wiki keeps a local retrieval index at `<wiki>/.depot/` (hybrid
+semantic + keyword search over cleaned sources and articles, maintained
+automatically: sources enter when their cleanup succeeds, articles refresh
+after every run). The researcher queries it with its `rag_search` tool, so
+prior material is recalled instead of re-ingested. Wikis are fully
+isolated — each wiki's index is its own; nothing is shared between them.
+
+`plan.md`, `leads.md`, `log.md`, and `.trash/` are never indexed.
 
 ## What a run does
 

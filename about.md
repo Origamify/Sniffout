@@ -19,7 +19,7 @@ Ingesting URLs needs a headless Chrome; PDFs and local files don't.
 3. Or paste a URL / PDF / local `.md` path — its markdown lands in the wiki's `sources/`,
    and a cleanup job rewrites it into a clean article draft.
 4. Message the researcher in chat — it reads the sources, writes `articles/*.md`, keeps a
-   persistent plan, and its answer appears in the sidebar. Or press `Start Loop` and it
-   re-runs itself until it judges the work done.
+   persistent plan, and its answer appears in the sidebar. Or press `Start Loop` and a
+   separate judge pass re-runs it until the work is done.
 
 Run the tests with `./test.sh`. Routes, file layout, settings: `project.md`.

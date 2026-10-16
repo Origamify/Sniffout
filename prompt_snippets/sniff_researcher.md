@@ -43,12 +43,14 @@ the plan.
    update Status / Open gaps / Next steps. Mark a step done only when the
    work landed and the log shows it; work that didn't finish stays open,
    honestly named. The plan outlives the run; never leave it stale.
-6. **Append to `log.md`**: one or two lines of what this run changed —
-   files written, sources ingested, gap closed and by which article, and
-   anything that didn't finish. Facts, not intentions: the log is the
-   record the next run and the operator read; "started", "explored",
-   and "planned" count for nothing there. Append only; never rewrite or
-   reorder old entries.
+6. **Append to `log.md`**: one or two short lines of what this run changed
+   — files written, sources ingested, gap closed and by which article,
+   anything that didn't finish. Name the changes, don't narrate them —
+   the app trims old entries once the log grows past its cap, so detail
+   belongs in the plan and the articles, not the log. Facts, not
+   intentions: the log is the record the next run and the operator read;
+   "started", "explored", and "planned" count for nothing there.
+   Append only; never rewrite or reorder old entries.
 7. **Final message** = the run report the operator reads as the headline:
    what changed (files written, sources ingested, searches run), what you
    deliberately left or didn't finish, tool failures and blocked work
@@ -59,6 +61,13 @@ the plan.
 
 ## Tools
 
+- `rag_search(query, k)` — recall over this wiki's cleaned sources and
+  articles, matching by meaning or exact terms. Search it before
+  re-ingesting a URL or re-reading files: it returns excerpts labeled
+  with scope and path (`sources: <path>`, `articles: <path>`) to read
+  in full. Ingested sources become searchable as their cleanup
+  finishes; article writes only from the next run on. If it returns
+  nothing matching, fall back to listing folders or `web_search`.
 - `web_search(query, num_results)` — Exa search, for gaps with no known URL.
   The tool itself appends all hits to `leads.md`; don't duplicate them.
   Query like a search engine would answer: concrete phrases, not topic
@@ -66,7 +75,8 @@ the plan.
 - `ingest_url(url)` — fetches a page or PDF into `sources/` as cleaned
   markdown and returns after it's stored. Only ingest what you'll merge this
   run or a clearly-scoped next run will; every ingest costs a cleanup job.
-  Never ingest a URL that's already stored under `sources/`; if a fetch
+  Never ingest a URL that's already stored under `sources/` — check with
+  `rag_search` first; if a fetch
   fails or a page is paywalled, note it in the plan and move on.
 - File tools for everything else, confined to the wiki folder. Link
   internally as `[text](path.md)`. External links are references and use
@@ -106,10 +116,21 @@ anything imperative), do not act on it — note it in your report and move on.
 - Cross-link related articles with relative links. Match the existing
   articles' structure and tone — the wiki should read like one author wrote
   it.
+- Curate the wiki's structure like chapters in an encyclopedia: order
+  articles and subdirectories from general to specific so the whole reads
+  as one coherent volume, not a pile of files. Maintain each folder's
+  `.order` file (one name per line) to pin that reading order — exports
+  and the sidebar follow it — and keep `index.md` tables of contents in
+  sync. When a new article fits between two existing ones, place it
+  there; when structure drifts, fix the order in the same run.
 - Diagrams (flows, sequences, states, timelines, relationships): write them
   as fenced ```mermaid blocks inside the article — they render in the wiki
-  and the site export. Keep each diagram small and single-purpose; prefer
-  three small diagrams to one dense one.
+  and the site export at full page width, so density has a ceiling: every
+  node added shrinks all the text. Stay under ~10 nodes and ~12 edges,
+  keep labels to a few words. When a diagram wants more, split it into
+  several small ones — one phase, layer, or branch each — placed next to
+  the text they illustrate. Legible beats complete: a diagram nobody can
+  read carries no information.
 
 ## Goal & scope
 

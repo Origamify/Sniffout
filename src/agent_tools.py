@@ -1,5 +1,7 @@
 """Custom uharness tools registered for researcher jobs (ingest_url, web_search)."""
 
+from urllib.parse import urlsplit
+
 
 INGEST_TOOL_SCHEMA = {
     "type": "function",
@@ -22,9 +24,16 @@ INGEST_TOOL_SCHEMA = {
 
 
 def make_ingest_tool(wiki_base):
-    """Tool closure: run the ingest pipeline against this wiki; return its status line."""
+    """Tool closure: run the ingest pipeline against this wiki; return its status line.
+
+    Accepts http(s) URLs only. The manual /ingest form keeps local-file
+    support, but an agent must not be able to pull arbitrary local files
+    into the wiki (prompt injection -> local file read).
+    """
     def ingest_url(url: str) -> str:
         from . import ingest  # local: ingest imports operations
+        if urlsplit(url).scheme not in ("http", "https"):
+            raise ValueError(f"ingest_url takes an http(s) URL, got {url!r}")
         body, _status = ingest.run_ingest(url, wiki_base, sync_cleanup=True)
         return body
     return ingest_url
@@ -52,6 +61,53 @@ SEARCH_TOOL_SCHEMA = {
         },
     },
 }
+
+
+RAG_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "rag_search",
+        "description": (
+            "Search this wiki's own cleaned sources and articles — by meaning "
+            "or by exact terms. Use it to recall what prior runs gathered, "
+            "before re-ingesting a URL or re-reading files. Returns excerpts "
+            "labeled with scope and path (sources:/articles:) to read in full."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string",
+                          "description": "what to recall, phrased as content, not a filename"},
+                "k": {"type": "integer",
+                      "description": "results to return, 1-20 (default 8)"},
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
+def make_rag_tool(wiki_base):
+    """Tool closure: hybrid search over the wiki's own depot.
+
+    Only ever reads — the index is maintained by the app's ingest/cleanup/
+    job lifecycle, not by the agent. Degrades to a plain message when the
+    depot is unavailable or empty (agent falls back to web_search)."""
+    def rag_search(query: str, k: int = 8) -> str:
+        from . import rag  # local: keeps the module import graph shallow
+        k = max(1, min(k, 20))  # schema says 1-20; don't let a bad k flood context
+        hits = rag.search(query, wiki_base, k=k)
+        if not hits:
+            return ("No indexed material matched (or the index is empty). "
+                    "Fall back to web_search / listing the sources folder.")
+        out = []
+        for h in hits:
+            snippet = " ".join(h["snippet"].split())
+            if len(snippet) > 400:  # cut at word boundary; mark so the file gets read
+                snippet = snippet[:400].rsplit(" ", 1)[0] + " …"
+            out.append(f"{h['scope']}: {h['ref']}\n{snippet}")
+        return "\n\n".join(out)
+    return rag_search
 
 
 def make_search_tool(wiki_base):

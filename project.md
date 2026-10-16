@@ -8,8 +8,8 @@ Active. Local, single-operator research tool. Agent jobs
 daemon worker thread; browsing,
 search, and ingest storage work without any LLM.
 
-**Tests**: 146, all passing, offline (dispatch/Exa/PDF stubbed; `tests/data/tiny.pdf`
-is the committed PDF fixture).
+**Tests**: 175, all passing, offline (dispatch/Exa/PDF stubbed; `tests/data/tiny.pdf`
+is the committed PDF fixture; ragdepot runs on a fake embedder).
 
 ## Scope
 
@@ -27,7 +27,15 @@ In:
 - Wiki archive (picker page): collapsible Archive section below the active
   wikis — Archive moves the wiki dir to `archive_repository/<name>/` and
   deletes `.results/<name>/`; Unarchive moves it back and opens it. Blocked
-  with 409 while the wiki has a running loop or an in-flight job.
+  with 409 while the wiki has a running loop or an in-flight job. A
+  **Reindex** button next to Archive rebuilds the wiki's retrieval index
+  from disk (same 409 busy guard)
+- Retrieval (ragdepot): per-wiki depot at `<wiki>/.depot/` (scopes
+  `sources` + `articles`, hybrid dense+BM25) the researcher queries via its
+  `rag_search` tool — wikis are fully isolated, nothing is shared between
+  them. Sources enter the
+  depot only when their cleanup job succeeds; articles re-upsert by mtime
+  after every job. `plan.md`/`leads.md`/`log.md`/`.trash/` are never indexed
 - Researcher loop (`Start Loop`): a monitor thread re-dispatches runs until a
   stop condition. The researcher never grades itself: after each run a **judge** —
   a separate cheap model pass — reads `plan.md` and `log.md` only, appends a
@@ -55,9 +63,11 @@ python tests/utils/selenium_review.py   # E2E UI review vs a running server (hea
 
 `uharness` installs from GitHub via `requirements.txt` (an editable local
 checkout works for development) — without it, `import uharness` fails.
+Retrieval needs `fastembed` (pinned) plus the ragdepot library — not on an
+index yet, `pip install -e /path/to/ragdepot` (see README).
 
-Dependencies: `requirements.txt` (Flask, bs4, html2text, selenium, markdown, pypdf,
-bleach, uharness). Browsers: Chrome for URL ingest,
+Dependencies: `requirements.txt` (Flask, bs4, html2text, selenium, markdown,
+pypdf, bleach, fastembed, uharness). Browsers: Chrome for URL ingest,
 Firefox for the Selenium review. Endpoint config lives in the repo's
 gitignored `.env` (`URL`/`KEY`, `MODEL` for research, `FAST_MODEL` for
 cleanup + judging — template `.env.example`; any OpenAI-compatible
@@ -79,13 +89,16 @@ endpoint) — see uHarness docs.
 | `src/agent_tools.py` | Custom uharness tools for researcher jobs: `ingest_url` + `web_search` schemas and closures |
 | `src/operations.py` | uharness dispatch: prompt composition from `prompt_snippets/`, worker-thread launch, inline judge pass, atomic result publish, filename slugs |
 | `src/loop.py` | Researcher loop: `Loop` state + per-wiki registry, judge-verdict parsing, monitor thread that re-dispatches runs |
+| `src/rag.py` | ragdepot integration: per-wiki depots (sources+articles scopes), lifecycle writers (index-on-cleanup, article mtime refresh, deindex-on-delete, `reindex_wiki`), wiki-scoped search; every writer swallows `DepotError` |
 | `src/results.py` | Job output parsing: JSON events → {label, body} events + final `output` |
 | `src/sniffout.py` | Legacy shim re-exporting `app`/`main` from `src.webui` |
 | `prompt_snippets/` | `system_prompt.md` + personas (`sniff_researcher.md`, `sniff_ingest.md`, `sniff_judge.md`) composed into agent prompts; `loop_mode.md` is the loop annex (no self-verdict, judge-ready record) added only to loop-run dispatches |
 | `src/templates/`, `src/static/` | Jinja templates + CSS/JS for the three-panel UI |
 | `research_repository/` | Wiki data (gitignored); `LeanFIRE/` is a live example |
 | `utils/link_review.py` | Maintenance: walks articles, enforces link brackets (internal `[text](path.md)`, external `[[label]](url)`), flags dead links as `<deadlink>url</deadlink>`, marks uncited sources as pruning candidates; `--dry-run` to preview |
+| `utils/reindex_wiki.py` | Retrieval maintenance: reindex one wiki's (arg) or every wiki's (`--all`) sources+articles into its `.depot/`; migration for pre-RAG wikis and repair tool |
 | `utils/export_docusaurus.py` | Export: builds a Docusaurus site under `docusaurus_export/<slug>/` (articles tree, optional `--sources`; `.order` → sidebar positions, first H1 → title, `[[x]](url)` refs flattened, deadlink flags and stray `<`/`{` MDX-escaped; scaffolds package.json/config/sidebars) |
+| `utils/export_pdf.py` | Export: one academic-paper-style PDF per wiki under `pdf_export/<slug>.pdf` (WeasyPrint, not in requirements — `pip install weasyprint`; articles in `.order` → numbered sections, plan.md `## Abstract` section if present → title-page abstract, `[[x]](url)` → IEEE citations `[n]` + References list, internal links → in-doc anchors, mermaid fences always pre-rendered to PNG via the vendored mermaid.min.js in headless Chrome (Selenium) — captured with slack for labels painting past the svg viewBox, trimmed to the diagram ink (uniform framing, never cropped), and given a rotated landscape figure page when the portrait page would shrink them hard; broken fences fall back to code blocks) |
 | `utils/make_gif.py` | Docs: rebuilds `docs/demo.gif` for the README — serves the app in-process against wiped `demo_gif_*` scratch dirs (removed after), drives headless Firefox through the real first-run flow; needs Firefox + a working `.env`; what's shown: `utils/make_gif.md` |
 | `tests/` | pytest, one file per module; `conftest.py` = Flask test client, temp-wiki `active_wiki`, dispatch stub; `utils/selenium_review.py` = E2E pass |
 | `workflow.md` | User-facing overview: setup, what you do, how a run advances a wiki |
@@ -93,7 +106,9 @@ endpoint) — see uHarness docs.
 Where to change what: routes/UI → `src/webui.py`; wiki files → `src/wiki.py`;
 agent prompt → `src/operations.py` (`_compose`, `dispatch_*`) + `prompt_snippets/`;
 loop → `src/loop.py` + `loop/*` routes in `src/webui.py`; fetch/render →
-`src/web_fetch.py`; sidebar parsing → `src/results.py`.
+`src/web_fetch.py`; sidebar parsing → `src/results.py`; retrieval →
+`src/rag.py` (depot lifecycle + `rag_search` wiring in
+`src/agent_tools.py`/`src/operations.py`).
 
 ## Conventions
 
@@ -110,7 +125,8 @@ loop → `src/loop.py` + `loop/*` routes in `src/webui.py`; fetch/render →
   chat answer.
 - Researcher jobs get two uharness tools, registered after `set_allowed_tools`
   (which re-allows them): `ingest_url` (ingest pipeline with `sync_cleanup=True` —
-  cleanup runs inline before the tool returns, so no half-cleaned sources) and
+  cleanup runs inline before the tool returns, so no half-cleaned sources;
+  http(s) URLs only — local files stay a manual-form-only path) and
   `web_search` (Exa). Cleanup jobs get neither.
 - Ingest appends stored paths to `plan.md` under `## New sources`; the researcher
   merges them and drops the entries when rewriting the plan.
@@ -127,7 +143,10 @@ loop → `src/loop.py` + `loop/*` routes in `src/webui.py`; fetch/render →
   untrusted) to render them client-side. The Docusaurus export keeps fences
   raw (fences are MDX-exempt) and scaffolds the mermaid theme.
 - The loop monitor blocks on the dispatch completion event (set after atomic
-  publish, failures included) — no file polling. After a successful run it runs
+  publish, failures included) — no file polling. The app trims `log.md` past
+  20 KB down to ~10 KB (the newest whole lines; a line-boundary cut, so the
+  newest entry always survives intact) before every researcher dispatch and
+  judge pass — agents never rewrite the log, the app owns its size. After a successful run it runs
   the judge inline on the monitor thread (`operations.run_judge`, off the worker
   pool like inline cleanup, nothing published — the judge's only writes are
   `plan.md`/`log.md`; its verdict is parsed from the returned doc's last line).
@@ -140,6 +159,16 @@ loop → `src/loop.py` + `loop/*` routes in `src/webui.py`; fetch/render →
   own report ends with no verdict line.
 - uharness `max_rounds` (model↔tool turns in one run) is 100; the loop's `max_runs`
   (run counter on the loop object) is a separate knob — different names on purpose.
+- Retrieval depots: one shared lazy embedder across all depots (tests inject a
+  fake via `rag._embed_override`); source parts enter the wiki depot only on
+  cleanup success — `_dispatch(after=...)` runs the index upkeep on the
+  worker thread after each job (before `done_event`), `run_sniff_ingest_now`
+  indexes inline; article refresh is an mtime diff against
+  `<wiki>/.depot/articles-mtimes.json` (`sources-mtimes.json` mirrors it
+  for directly indexed sources) — every sync, forced reindex included,
+  also deindexes files that vanished from disk. Deleting a source (move
+  to `.trash/`) deindexes it. Every writer swallows `DepotError` — retrieval can never
+  break ingest, jobs, or the UI.
 
 ## Settings
 
@@ -152,8 +181,11 @@ loop → `src/loop.py` + `loop/*` routes in `src/webui.py`; fetch/render →
 | `MAX_ROUNDS` | `100` | uharness `max_rounds` ceiling for all jobs — constant in `src/operations.py` |
 | `MAX_RUNS_DEFAULT` | `10` | Loop run cap default — constant in `src/loop.py` |
 | `MAX_RUNS_CAP` | `40` | Loop run cap hard max (UI rejects higher) — constant in `src/loop.py` |
+| `LOG_MAX_BYTES` | `20 KB` | Trim `log.md` (oldest entries dropped) once it passes this — before every researcher dispatch and judge pass, so the log stays readable under the uharness 100 KB file-read cap; constant in `src/wiki.py` |
+| `LOG_TARGET_BYTES` | `10 KB` | Approx size `log.md` is trimmed down to — constant in `src/wiki.py` |
 | `--jobs N` CLI arg | `2` | Parallel uharness jobs (`operations.configure_parallel`); extras queue FIFO |
 | `EXA_MCP_URL` | `https://mcp.exa.ai/mcp` | Exa search endpoint (constant, no key) |
+| `DEFAULT_K` | `8` | Hits per `rag_search` call — constant in `src/rag.py` |
 
 ## TODO
 

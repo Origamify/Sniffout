@@ -306,7 +306,7 @@ article a:hover, .source-body a:hover { filter: brightness(1.2); }
 .source-body h3 { font-size: 1rem; margin: 16px 0 8px; }
 
 /* Wiki picker */
-.wiki-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.result-entry.wiki-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .wiki-entry .wiki-link { flex: 1; }
 .wiki-archive { margin-top: 20px; }
 .wiki-archived { color: var(--text-dim); }

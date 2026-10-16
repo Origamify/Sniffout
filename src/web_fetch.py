@@ -46,6 +46,10 @@ def fetch_page(url: str) -> tuple[str, int]:
         WebDriverWait(driver, 30).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
+        # Chrome follows redirects internally; re-guard the final URL so a
+        # public page 302-ing to a private address extracts nothing. (JS
+        # fetches issued by the loaded page stay out of scope, like rebinding.)
+        assert_public_http_url(driver.current_url)
         status = driver.execute_script(
             "const e = performance.getEntriesByType('navigation')[0];"
             " return e ? e.responseStatus : 0;"

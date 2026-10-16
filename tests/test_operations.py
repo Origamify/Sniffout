@@ -6,6 +6,8 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from conftest import fake_uharness, results_dir, wait_for_file
 from src import operations
 
@@ -88,19 +90,29 @@ def test_ingest_outputs_disabled_by_default(monkeypatch, tmp_path):
 
 def test_ingest_tool_blocks_until_cleanup_done(tmp_path, monkeypatch):
     """The researcher's ingest_url runs the cleanup inline (sync_cleanup=True)."""
-    from src import agent_tools, operations
-    source = tmp_path / "input.md"
-    source.write_text("# raw material", encoding="utf-8")
+    from src import agent_tools, operations, web_fetch
     cleaned = []
 
     def fake_cleanup(path, wiki_base):
         cleaned.append(Path(path).name)
 
     monkeypatch.setattr(operations, "run_sniff_ingest_now", fake_cleanup)
+    monkeypatch.setattr(web_fetch, "fetch_page",
+                        lambda url: ("<html><body><p>raw material</p></body></html>", 200))
     tool = agent_tools.make_ingest_tool(tmp_path)
-    body = tool(url=str(source))
+    body = tool(url="https://example.com/page")
     assert body.startswith("Stored: ") and body.endswith("; cleanup finished")
-    assert len(cleaned) == 1 and cleaned[0].endswith("-input.md")  # stored part cleaned in-call
+    assert len(cleaned) == 1 and "example-com-page" in cleaned[0]  # stored part cleaned in-call
+
+
+def test_ingest_tool_rejects_non_http_inputs(tmp_path):
+    """ingest_url takes http(s) URLs only — no local files, no other schemes."""
+    from src import agent_tools
+    tool = agent_tools.make_ingest_tool(tmp_path)
+    for bad in ("/etc/passwd.md", "file:///etc/hosts", str(tmp_path / "notes.md"),
+                str(tmp_path / "doc.pdf")):
+        with pytest.raises(ValueError):
+            tool(url=bad)
 
 
 def test_parallel_limit_queues_extra_jobs(tmp_path, monkeypatch):
@@ -234,7 +246,7 @@ def test_researcher_gets_ingest_and_search_tools(tmp_path, monkeypatch):
     assert deadline
     research = next(c for c in calls if "sniffout" in c["output_path"])
     cleanup = next(c for c in calls if "sniff_ingest" in c["output_path"])
-    assert set(research["registered_tools"]) == {"ingest_url", "web_search"}
+    assert set(research["registered_tools"]) == {"ingest_url", "web_search", "rag_search"}
     assert set(cleanup["registered_tools"]) == set()
     # Tool calls reach the pipelines: ingest gets url + this wiki, search the query.
     body = research["registered_tools"]["ingest_url"](url="https://example.com/p")

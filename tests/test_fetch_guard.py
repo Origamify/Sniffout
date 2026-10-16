@@ -43,6 +43,51 @@ def test_fetch_pdf_bytes_guards_before_request(monkeypatch):
         pdf_extract.fetch_pdf_bytes("http://127.0.0.1/doc.pdf")
 
 
+# --- redirect hops are re-guarded --------------------------------------------
+
+
+def test_redirect_hop_to_private_target_is_rejected():
+    """A 302 to a private address raises before the hop is followed."""
+    handler = pdf_extract._GuardedRedirectHandler()
+    req = urllib.request.Request("http://8.8.8.8/doc.pdf")
+    with pytest.raises(ValueError):
+        handler.redirect_request(req, None, 302, "Found", {}, "http://127.0.0.1/priv")
+
+
+def test_redirect_hop_to_public_target_is_followed():
+    """A public hop delegates to urllib's normal redirect handling."""
+    handler = pdf_extract._GuardedRedirectHandler()
+    req = urllib.request.Request("http://8.8.8.8/doc.pdf")
+    new = handler.redirect_request(req, None, 302, "Found", {}, "https://8.8.8.8/next")
+    assert isinstance(new, urllib.request.Request)
+    assert new.full_url == "https://8.8.8.8/next"
+
+
+def test_fetch_page_rejects_private_redirect(monkeypatch):
+    """Chrome-level redirects are re-guarded via the final URL; nothing extracts."""
+    from src import web_fetch
+
+    class FakeDriver:
+        def __init__(self, options=None):
+            pass
+
+        def set_page_load_timeout(self, timeout):
+            pass
+
+        def get(self, url):
+            self.current_url = "http://10.0.0.5/admin"  # simulated 302
+
+        def execute_script(self, script):
+            return "complete" if "readyState" in script else 200
+
+        def quit(self):
+            pass
+
+    monkeypatch.setattr(web_fetch.webdriver, "Chrome", lambda options=None: FakeDriver())
+    with pytest.raises(ValueError):
+        web_fetch.fetch_page("https://8.8.8.8/doc")
+
+
 def test_ingest_rejects_non_public_url(client, active_wiki, monkeypatch):
     """fetch_page guards before Chrome launches; nothing stored."""
     from src import web_fetch

@@ -20,8 +20,21 @@ def extract_pdf_text(pdf_path) -> str:
     return "\n\n".join(pages).strip()
 
 
+class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-run the fetch guard on every redirect hop before following it."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        assert_public_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Redirects are re-guarded per hop: a public URL 302-ing to a private
+# address must not slip past the pre-fetch check (urllib follows by default).
+_opener = urllib.request.build_opener(_GuardedRedirectHandler())
+
+
 def fetch_pdf_bytes(url: str) -> bytes:
     """Download a remote PDF's raw bytes over guarded urllib (no browser)."""
     assert_public_http_url(url)
-    with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as resp:
+    with _opener.open(url, timeout=FETCH_TIMEOUT) as resp:
         return resp.read()

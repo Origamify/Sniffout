@@ -8,3 +8,8 @@ pypdf==6.16.2
 bleach==6.4.0
 # Agent harness, installed editable straight from GitHub:
 -e git+https://github.com/Origamify/uharness.git#egg=uharness
+# Retrieval depots (src/rag.py): embedder + library. ragdepot has no public
+# index yet — install it from a checkout: pip install -e /path/to/ragdepot
+# (pin via git+URL here once it's published).
+fastembed==0.8.1
+# -e git+https://github.com/Origamify/ragdepot.git#egg=ragdepot

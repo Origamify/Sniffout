@@ -4,6 +4,12 @@ PLAN_FILE = "plan.md"
 LEADS_FILE = "leads.md"
 LOG_FILE = "log.md"
 NEW_SOURCES_HEADING = "## New sources"
+# The log is trimmed (oldest entries dropped) once it passes the cap, down to
+# about the target — uharness read_file refuses files over 100 KB, so an
+# unbounded append-only log would eventually go unreadable for judge and
+# researcher alike.
+LOG_MAX_BYTES = 20 * 1024
+LOG_TARGET_BYTES = 10 * 1024
 
 import shutil
 from pathlib import Path
@@ -103,6 +109,28 @@ def unarchive_wiki(name: str) -> Path:
     REPO_DIR.mkdir(parents=True, exist_ok=True)
     src.replace(dest)
     return dest
+
+
+def trim_log(wiki_base) -> bool:
+    """Cut log.md down to recent entries when it grows past the cap.
+
+    Keeps the last ~LOG_TARGET_BYTES of whole lines (the log is
+    line-per-entry, newest last). Agents never rewrite the log — the app
+    owns its size so it stays readable under the harness file-read cap.
+    Returns True when a trim happened; missing/unreadable logs are noops.
+    """
+    log = wiki_base / LOG_FILE
+    try:
+        if log.stat().st_size <= LOG_MAX_BYTES:
+            return False
+        text = log.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    cut = text.rfind("\n", 0, len(text) - LOG_TARGET_BYTES)
+    if cut == -1:  # no line boundary behind the window: hard cut mid-line
+        cut = len(text) - LOG_TARGET_BYTES - 1
+    log.write_text(text[cut + 1:].lstrip("\n"), encoding="utf-8")
+    return True
 
 
 def append_leads(wiki_base, query, results):

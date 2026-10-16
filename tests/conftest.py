@@ -1,9 +1,13 @@
 """Pytest configuration: project root on sys.path + Flask test-client fixtures."""
 
 import json
+import re
 import sys
 import time
+import zlib
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -96,6 +100,26 @@ def results_dir(wiki_base):
     """The wiki's job output dir under the test-patched .results root."""
     from src import wiki as wikimod
     return wikimod.results_dir(Path(wiki_base).name)
+
+
+def fake_embed(texts: list[str]) -> np.ndarray:
+    """Deterministic bag-of-words vectors (ragdepot's conftest pattern)."""
+    dim = 64
+    out = np.zeros((len(texts), dim), dtype=np.float32)
+    for i, text in enumerate(texts):
+        for word in re.findall(r"\w+", text.lower()):
+            out[i, zlib.crc32(word.encode()) % dim] += 1.0
+    norms = np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
+    return out / norms
+
+
+@pytest.fixture(autouse=True)
+def _rag_offline(monkeypatch):
+    """Keep ragdepot offline and isolated: fake embedder (no model download)
+    and a clean per-wiki depot cache."""
+    from src import rag
+    monkeypatch.setattr(rag, "_embed_override", fake_embed)
+    monkeypatch.setattr(rag, "_depots", {})
 
 
 @pytest.fixture

@@ -25,13 +25,26 @@ Rebuild it after UI changes with `python utils/make_gif.py` — see
 - **Researcher loop** — `Start Loop` re-dispatches research runs until a
   separate judge pass (a cheap model reading `plan.md`/`log.md` only) verdicts
   `done`, the operator stops, or a run cap is hit
-- **Export** — build a Docusaurus site from a wiki (`utils/export_docusaurus.py`)
+- **Source recall (RAG)** — every wiki keeps a local hybrid (semantic+BM25)
+  index of its cleaned sources and articles; the researcher's `rag_search`
+  tool recalls prior material instead of re-ingesting it. Wikis are fully
+  isolated — no index is ever shared across wikis
+- **Export** — build a Docusaurus site from a wiki
+  (`utils/export_docusaurus.py`) or a single academic-paper-style PDF
+  (`utils/export_pdf.py`) with IEEE citations and rendered diagrams
 
 Agent jobs run in-process on
 [uharness](https://github.com/Origamify/uharness) — a minimal prompt →
 tool-calling loop → result library. Endpoint config lives in a gitignored
 `.env` in the repo root (`URL`, `KEY`, `MODEL`, `FAST_MODEL`) — template:
 `.env.example`.
+
+Retrieval (RAG) runs on
+[ragdepot](https://github.com/Origamify/ragdepot) + fastembed — the first
+index or search downloads the embedding model (~130 MB) once to the user
+cache; after that it's fully offline. ragdepot isn't on an index yet:
+`pip install -e /path/to/ragdepot` alongside `requirements.txt`.
+See [workflow.md](workflow.md#the-retrieval-index-rag) for the depot layout.
 
 ## Requirements
 
@@ -98,6 +111,14 @@ root with the venv active):
   a static Docusaurus site under `docusaurus_export/<wiki-slug>/` from a
   wiki's articles (`--sources` to include them; `.order` files drive the
   sidebar). Scaffolds everything needed to `npm start`.
+- **PDF export** — `python utils/export_pdf.py <wiki> [--out FILE]` — render
+  a wiki as one academic-paper-style PDF under `pdf_export/<wiki-slug>.pdf`:
+  `.order`-numbered sections, abstract title page, `[[label]](url)` refs as
+  IEEE citations, mermaid diagrams as figures. Needs `pip install weasyprint`
+  (not in requirements.txt); diagrams also use headless Chrome.
+- **Reindex** — `python utils/reindex_wiki.py <wiki>` (or `--all`) — rebuild a
+  wiki's retrieval depot from disk; migrates wikis created before the depot
+  existed and repairs index drift.
 
 ## Docs
 
@@ -114,7 +135,8 @@ root with the venv active):
   fully offline rendering; diagrams render client-side with
   `securityLevel: strict`.
 - All outbound fetches go through an SSRF guard (`src/fetch_guard.py`);
-  source markdown is bleach-sanitized before render.
+  source markdown is bleach-sanitized before render. Cross-origin POSTs
+  (CSRF from other websites against the local server) are rejected.
 
 ## License
 
