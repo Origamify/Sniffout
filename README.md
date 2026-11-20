@@ -141,3 +141,13 @@ root with the venv active):
 ## License
 
 [MIT](LICENSE)
+
+---
+
+
+- Built with AI assistance (PI agent / uHarness) — code, tests, docs.
+- Models used: Qwen / GLM.
+- Code is mostly AI-written, human-reviewed. Human focus on modularization, clarity of purpose, and the contracts the AI implements against.
+- Docs are mostly written autonomously by the agent and reviewed strictly.
+- Tests are mostly AI-generated, then maintained and reviewed, with certain human requirements on what must be tested.
+- Goal: deliver good solutions to the problem — oversized results for the effort — not to control every detail.
